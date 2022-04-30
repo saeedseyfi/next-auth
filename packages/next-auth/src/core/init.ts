@@ -8,7 +8,7 @@ import createSecret from "./lib/utils"
 import * as cookie from "./lib/cookie"
 import * as jwt from "../jwt"
 import { defaultCallbacks } from "./lib/default-callbacks"
-import { createCSRFToken } from "./lib/csrf-token"
+import { createCSRFToken, verifyCSRFToken } from "./lib/csrf-token"
 import { createCallbackUrl } from "./lib/callback-url"
 import { IncomingRequest } from "."
 
@@ -100,32 +100,32 @@ export async function init({
     // Callback functions
     callbacks: { ...defaultCallbacks, ...userOptions.callbacks },
     logger,
-    callbackUrl: url.origin,
+    callbackUrl: url.origin
   }
 
   // Init cookies
 
   const cookies: cookie.Cookie[] = []
 
-  const {
-    csrfToken,
-    cookie: csrfCookie,
-    csrfTokenVerified,
-  } = createCSRFToken({
-    options,
-    cookieValue: reqCookies?.[options.cookies.csrfToken.name],
-    isPost,
-    bodyValue: reqCsrfToken,
-  })
+  // CSRF token
 
-  options.csrfToken = csrfToken
-  options.csrfTokenVerified = csrfTokenVerified
+  const csrfCookieValue = reqCookies?.[options.cookies.csrfToken.name]
 
-  if (csrfCookie) {
+  if (csrfCookieValue) {
+    options.csrfTokenVerified = isPost && verifyCSRFToken({
+      secret: options.secret,
+      cookieValue: csrfCookieValue,
+      bodyValue: reqCsrfToken
+    })
+  } else {
+    const { csrfToken, cookie: csrfCookie } = createCSRFToken(options.secret)
+
+    options.csrfToken = csrfToken
+
     cookies.push({
       name: options.cookies.csrfToken.name,
       value: csrfCookie,
-      options: options.cookies.csrfToken.options,
+      options: options.cookies.csrfToken.options
     })
   }
 

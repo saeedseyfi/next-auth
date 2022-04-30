@@ -1,10 +1,8 @@
 import { createHash, randomBytes } from "crypto"
-import { InternalOptions } from "../../lib/types"
 
-interface CreateCSRFTokenParams {
-  options: InternalOptions
-  cookieValue?: string
-  isPost: boolean
+interface VerifyCSRFTokenParams {
+  secret: string;
+  cookieValue?: string;
   bodyValue?: string
 }
 
@@ -22,33 +20,41 @@ interface CreateCSRFTokenParams {
  * https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie
  * https://owasp.org/www-chapter-london/assets/slides/David_Johansson-Double_Defeat_of_Double-Submit_Cookie.pdf
  */
-export function createCSRFToken({
-  options,
-  cookieValue,
-  isPost,
-  bodyValue,
-}: CreateCSRFTokenParams) {
-  if (cookieValue) {
-    const [csrfToken, csrfTokenHash] = cookieValue.split("|")
-    const expectedCsrfTokenHash = createHash("sha256")
-      .update(`${csrfToken}${options.secret}`)
-      .digest("hex")
-    if (csrfTokenHash === expectedCsrfTokenHash) {
-      // If hash matches then we trust the CSRF token value
-      // If this is a POST request and the CSRF Token in the POST request matches
-      // the cookie we have already verified is the one we have set, then the token is verified!
-      const csrfTokenVerified = isPost && csrfToken === bodyValue
 
-      return { csrfTokenVerified, csrfToken }
-    }
-  }
-
-  // New CSRF token
-  const csrfToken = randomBytes(32).toString("hex")
-  const csrfTokenHash = createHash("sha256")
-    .update(`${csrfToken}${options.secret}`)
+function createHashWithSecret(
+  secret: string,
+  csrfToken: string
+): string {
+  return createHash("sha256")
+    .update(`${csrfToken}${secret}`)
     .digest("hex")
+}
+
+/**
+ * Create a CSRF token and the cookie vlaue.
+ */
+export function createCSRFToken(secret: string) {
+  const csrfToken = randomBytes(32).toString("hex")
+  const csrfTokenHash = createHashWithSecret(secret, csrfToken)
   const cookie = `${csrfToken}|${csrfTokenHash}`
 
   return { cookie, csrfToken }
+}
+
+/**
+ * Verify the passed CSRF token with the cookie and the secret.
+ */
+export function verifyCSRFToken({
+                                  secret,
+                                  cookieValue,
+                                  bodyValue
+                                }: VerifyCSRFTokenParams) {
+  if (!cookieValue || bodyValue) {
+    return false
+  }
+
+  const [csrfToken, csrfTokenHash] = cookieValue.split("|")
+  const expectedCsrfTokenHash = createHashWithSecret(secret, csrfToken)
+
+  return csrfToken === bodyValue && csrfTokenHash === expectedCsrfTokenHash
 }
